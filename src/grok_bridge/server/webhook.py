@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -19,11 +20,42 @@ def post_webhook(bot: BotConfig, payload: dict[str, Any], *, timeout: float = 30
         "Authorization": f"Bearer {bot.webhook_auth}",
         "User-Agent": "grok-bridge/0.1",
     }
+    host = httpx.URL(bot.webhook_url).host
+    text = payload.get("text") or ""
     log.info(
-        "webhook POST bot=%s url_host=%s message_id=%s",
+        "webhook POST begin bot=%s host=%s message_id=%s text_len=%s timeout=%.1fs",
         bot.name,
-        httpx.URL(bot.webhook_url).host,
+        host,
         payload.get("message_id"),
+        len(str(text)),
+        timeout,
     )
-    with httpx.Client(timeout=timeout) as client:
-        return client.post(bot.webhook_url, json=payload, headers=headers)
+    started = time.monotonic()
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(bot.webhook_url, json=payload, headers=headers)
+    except Exception:
+        elapsed = time.monotonic() - started
+        log.exception(
+            "webhook POST transport error bot=%s host=%s elapsed=%.3fs",
+            bot.name,
+            host,
+            elapsed,
+        )
+        raise
+    elapsed = time.monotonic() - started
+    log.info(
+        "webhook POST done bot=%s host=%s status=%s elapsed=%.3fs body_len=%s",
+        bot.name,
+        host,
+        resp.status_code,
+        elapsed,
+        len(resp.content or b""),
+    )
+    if resp.status_code >= 400:
+        log.warning(
+            "webhook POST non-success status=%s preview=%s",
+            resp.status_code,
+            (resp.text or "")[:300],
+        )
+    return resp

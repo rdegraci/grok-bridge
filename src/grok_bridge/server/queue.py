@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass
+
+log = logging.getLogger("grok_bridge.queue")
 
 
 @dataclass
@@ -23,6 +26,7 @@ class ReplyQueue:
         self._lock = threading.Lock()
         self._items: list[StoredReply] = []
         self._next_seq = 1
+        log.info("queue init max_replies=%s", self._max)
 
     def append(
         self,
@@ -48,8 +52,21 @@ class ReplyQueue:
                     sent_at=sent_at,
                 )
             )
+            evicted = 0
             while len(self._items) > self._max:
                 self._items.pop(0)
+                evicted += 1
+            log.info(
+                "queue append seq=%s bot=%s in_reply_to=%s message_id=%s "
+                "text_len=%s size=%s evicted=%s",
+                seq,
+                bot,
+                in_reply_to,
+                message_id,
+                len(text or ""),
+                len(self._items),
+                evicted,
+            )
             return seq
 
     def list_since(self, bot: str, since: int, limit: int = 50) -> tuple[list[StoredReply], int]:
@@ -58,4 +75,13 @@ class ReplyQueue:
             matched = [r for r in self._items if r.bot == bot and r.seq > since]
             matched = matched[:limit]
             next_since = matched[-1].seq if matched else since
+            log.info(
+                "queue list bot=%s since=%s limit=%s matched=%s next_since=%s store_size=%s",
+                bot,
+                since,
+                limit,
+                len(matched),
+                next_since,
+                len(self._items),
+            )
             return list(matched), next_since

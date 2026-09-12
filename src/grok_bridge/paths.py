@@ -36,6 +36,9 @@ def ensure_bridge_token() -> tuple[str, bool]:
 
     Generates a random token on first use. Returns (token, created).
     """
+    import logging
+
+    log = logging.getLogger("grok_bridge.paths")
     path = token_path()
     created = False
     if not path.is_file() or not path.read_text(encoding="utf-8").strip():
@@ -46,8 +49,10 @@ def ensure_bridge_token() -> tuple[str, bool]:
         except OSError:
             pass
         created = True
+        log.info("token created path=%s len=%s", path, len(token))
     else:
         token = path.read_text(encoding="utf-8").strip()
+        log.info("token loaded path=%s len=%s", path, len(token))
     os.environ["GROK_BRIDGE_TOKEN"] = token
     return token, created
 
@@ -102,6 +107,9 @@ def ensure_app_config() -> tuple[Path, bool, bool]:
     examples/config.yaml.example when missing.
     Returns (app_dir, created_dotenv, created_config).
     """
+    import logging
+
+    log = logging.getLogger("grok_bridge.paths")
     dest_dir = app_dir()
     created_dotenv = False
     created_config = False
@@ -114,10 +122,16 @@ def ensure_app_config() -> tuple[Path, bool, bool]:
         except OSError:
             pass
         created_dotenv = True
+        log.info("seeded dotenv path=%s", env_dest)
+    else:
+        log.info("dotenv exists path=%s", env_dest)
 
     cfg_dest = config_path()
     if not cfg_dest.exists():
         cfg_dest.write_bytes(_read_example("config.yaml.example"))
         created_config = True
+        log.info("seeded config.yaml path=%s", cfg_dest)
+    else:
+        log.info("config.yaml exists path=%s", cfg_dest)
 
     return dest_dir, created_dotenv, created_config

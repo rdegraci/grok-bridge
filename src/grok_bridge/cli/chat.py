@@ -25,47 +25,53 @@ def _truncate(text: str, limit: int = 200) -> str:
 
 
 def _setup_session_log() -> Path:
+    """File-only logging — never attach handlers to stdout/stderr (chat UI)."""
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     path = cli_logs_dir() / f"cli-{ts}-{os.getpid()}.log"
     logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s %(levelname)s %(message)s",
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
         handlers=[
             logging.FileHandler(path, encoding="utf-8"),
         ],
         force=True,
     )
-    # Also keep warnings on stderr lightly
-    stderr = logging.StreamHandler(sys.stderr)
-    stderr.setLevel(logging.WARNING)
-    stderr.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
-    logging.getLogger().addHandler(stderr)
+    # Quiet HTTP client spam; keep grok_bridge.* readable in the session file
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     return path
 
 
-def _print_session_log_path(path: Path | None) -> None:
-    if path is not None:
-        print(f"Session log: {path}", file=sys.stderr)
+def _reachability_error(base_url: str, exc: BaseException) -> str:
+    text = str(exc).lower()
+    if "refused" in text or "connect" in text:
+        return (
+            f"Cannot reach bridge server at {base_url} — connection refused.\n"
+            f"That usually means grok-bridge is not running on this machine, "
+            f"or it is listening on a different port.\n"
+            f"Try: grok-bridge start\n"
+            f"Then: curl -sS {base_url}/health"
+        )
+    return (
+        f"Cannot reach bridge server at {base_url}: {exc}\n"
+        f"Try: grok-bridge start"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     _ = argv
-    session_log: Path | None = None
+    session_log = _setup_session_log()
     try:
         settings = load_settings(require_token=True, require_advisor_webhook=False)
-        session_log = _setup_session_log()
-        log.info("session start base_url=%s", settings.base_url)
+        log.info("session start base_url=%s session_log=%s", settings.base_url, session_log)
 
         client = BridgeClient(settings.base_url, settings.auth_token)
         try:
             client.health()
         except Exception as exc:  # noqa: BLE001
-            print(
-                f"Cannot reach bridge server at {settings.base_url} "
-                f"(is it started? try: grok-bridge start) ({exc})",
-                file=sys.stderr,
-            )
-            log.exception("health check failed")
+            msg = _reachability_error(settings.base_url, exc)
+            print(msg, file=sys.stderr)
+            log.error("health check failed: %s", exc)
             return 1
 
         active_bot: str | None = None
@@ -139,12 +145,8 @@ def main(argv: list[str] | None = None) -> int:
                     bot=active_bot, message_id=message_id, text=line
                 )
             except Exception as exc:  # noqa: BLE001
-                print(
-                    f"Cannot reach bridge server at {settings.base_url} "
-                    f"(is it started? try: grok-bridge start)",
-                    file=sys.stderr,
-                )
-                log.exception("send failed: %s", exc)
+                print(_reachability_error(settings.base_url, exc), file=sys.stderr)
+                log.error("send failed: %s", exc)
                 continue
 
             if status >= 400 or not data.get("ok", True):
@@ -213,8 +215,9 @@ def main(argv: list[str] | None = None) -> int:
 
         log.info("session end")
         return 0
-    finally:
-        _print_session_log_path(session_log)
+    except Exception:
+        log.exception("cli fatal")
+        raise
 
 
 if __name__ == "__main__":
