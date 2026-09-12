@@ -1,4 +1,4 @@
-"""Load settings from environment (.env) and optional config.yaml."""
+"""Load settings from Application Support .env and config.yaml."""
 
 from __future__ import annotations
 
@@ -8,6 +8,13 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+
+from grok_bridge.paths import (
+    app_dir,
+    config_path,
+    dotenv_path,
+    ensure_app_config,
+)
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
@@ -22,28 +29,20 @@ class BotConfig:
 @dataclass
 class Settings:
     host: str = "127.0.0.1"
-    port: int = 8787
+    port: int = 18787
     auth_token: str = ""
     base_url: str = "http://127.0.0.1:18787"
     poll_interval_sec: float = 1.5
     reply_timeout_sec: float = 90.0
     max_replies: int = 500
     bots: dict[str, BotConfig] = field(default_factory=dict)
+    app_dir: Path = field(default_factory=app_dir)
 
     def require_loopback(self) -> None:
         if self.host not in LOOPBACK_HOSTS:
             raise ValueError(
                 f"Bind host must be loopback (127.0.0.1 / ::1), got {self.host!r}"
             )
-
-
-def _repo_root() -> Path:
-    # src/grok_bridge/server/config.py -> parents[3] = repo root when editable
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        if (parent / "pyproject.toml").exists():
-            return parent
-    return Path.cwd()
 
 
 def _load_yaml(path: Path) -> dict:
@@ -57,13 +56,13 @@ def _load_yaml(path: Path) -> dict:
 
 
 def load_settings(*, require_token: bool = True, require_advisor_webhook: bool = False) -> Settings:
-    root = _repo_root()
-    load_dotenv(root / ".env")
-    load_dotenv()  # also allow cwd / already-exported env
+    app, created_dotenv, created_config = ensure_app_config()
 
-    raw = _load_yaml(root / "config.yaml")
-    if not raw:
-        raw = _load_yaml(root / "config.example.yaml")
+    # Prefer Application Support; allow process env to override after load
+    load_dotenv(dotenv_path(), override=False)
+    load_dotenv(override=False)
+
+    raw = _load_yaml(config_path())
 
     server = raw.get("server") or {}
     cli = raw.get("cli") or {}
@@ -77,15 +76,24 @@ def load_settings(*, require_token: bool = True, require_advisor_webhook: bool =
     max_replies = int(queue.get("max_replies") or 500)
 
     token = (os.environ.get("GROK_BRIDGE_TOKEN") or "").strip()
-    if require_token and not token:
+    if require_token and (not token or token == "CHANGE_ME"):
+        hint = ""
+        if created_dotenv or created_config:
+            hint = f" Fresh example files were created in {app}."
         raise SystemExit(
-            "GROK_BRIDGE_TOKEN is not set. Copy env.example to .env and set a token."
+            f"GROK_BRIDGE_TOKEN is not set (or still CHANGE_ME). "
+            f"Edit {dotenv_path()} and set a real token.{hint}"
         )
 
     bots: dict[str, BotConfig] = {}
     advisor_url = (os.environ.get("GROK_BRIDGE_ADVISOR_WEBHOOK_URL") or "").strip()
     advisor_auth = (os.environ.get("GROK_BRIDGE_ADVISOR_WEBHOOK_AUTH") or "").strip()
-    if advisor_url and advisor_auth:
+    if (
+        advisor_url
+        and advisor_auth
+        and "example.invalid" not in advisor_url
+        and advisor_auth != "CHANGE_ME_SENDER_KEY"
+    ):
         bots["advisor"] = BotConfig(
             name="advisor",
             webhook_url=advisor_url,
@@ -93,8 +101,9 @@ def load_settings(*, require_token: bool = True, require_advisor_webhook: bool =
         )
     elif require_advisor_webhook:
         raise SystemExit(
-            "Advisor webhook missing. Set GROK_BRIDGE_ADVISOR_WEBHOOK_URL and "
-            "GROK_BRIDGE_ADVISOR_WEBHOOK_AUTH in .env."
+            "Advisor webhook missing or still placeholder values. Set "
+            "GROK_BRIDGE_ADVISOR_WEBHOOK_URL and GROK_BRIDGE_ADVISOR_WEBHOOK_AUTH in "
+            f"{dotenv_path()}."
         )
 
     settings = Settings(
@@ -106,6 +115,7 @@ def load_settings(*, require_token: bool = True, require_advisor_webhook: bool =
         reply_timeout_sec=reply_timeout_sec,
         max_replies=max_replies,
         bots=bots,
+        app_dir=app,
     )
     settings.require_loopback()
     return settings

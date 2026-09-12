@@ -22,3 +22,6 @@ grok-bridge-cli = "grok_bridge.cli.chat:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+grok_bridge = ["examples/*"]

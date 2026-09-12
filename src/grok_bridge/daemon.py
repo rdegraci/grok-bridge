@@ -88,6 +88,16 @@ def cmd_run() -> int:
 
 
 def cmd_start() -> int:
+    from grok_bridge.paths import ensure_app_config
+
+    app, created_dotenv, created_config = ensure_app_config()
+    if created_dotenv or created_config:
+        print(f"seeded appdir: {app}")
+        if created_dotenv:
+            print(f"  created {app / '.env'} (edit secrets)")
+        if created_config:
+            print(f"  created {app / 'config.yaml'} (tunable knobs)")
+
     settings = load_settings(require_token=True, require_advisor_webhook=True)
     settings.require_loopback()
 
