@@ -198,6 +198,12 @@ def main(argv: list[str] | None = None) -> int:
                 log.warning("send error status=%s data=%s", status, data)
                 continue
 
+            print("sent, waiting…", flush=True)
+            log.info(
+                "webhook ack waiting for reply message_id=%s timeout=%.0fs",
+                message_id,
+                settings.reply_timeout_sec,
+            )
             deadline = time.monotonic() + settings.reply_timeout_sec
             matched = False
             while time.monotonic() < deadline:

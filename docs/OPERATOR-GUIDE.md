@@ -10,6 +10,19 @@ Typical use: **install on the Mac mini**, turn on **SSH (Remote Login)** in Syst
 
 It is **not** the Grok Bot app. Rich UI, approvals, and site/git work stay elsewhere.
 
+## Expectations (inbox, not fast chat)
+
+Treat **grok-bridge** as an **SSH in/out-box**, not a low-latency chat UI.
+
+| Surface | Use it for |
+| --- | --- |
+| **Grok Bot app on the Mac mini** | Interactive conversation when you want the fastest reply |
+| **grok-bridge** | Remote inbox over SSH — same agent, extra hop (webhook wake → agent → `POST /replies` → CLI poll) |
+
+After you send from the CLI, expect **tens of seconds** before a reply appears. That wait is mostly Grok Bot starting and answering, then posting back to the mini — not the local poll loop. The CLI prints `sent, waiting…` after the webhook is accepted so the gap is intentional.
+
+When you need a snappy back-and-forth, use the Grok Bot app on the mini. Use the bridge when you are already SSHed in and want a simple in/out channel.
+
 ## Before you start
 
 1. Mac mini is awake (prefer never-sleep for this machine).

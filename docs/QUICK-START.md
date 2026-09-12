@@ -9,6 +9,8 @@ Get **Grok Advisor** chat working on the Mac mini in a few minutes.
 3. **SSH into** the Mac mini from your laptop.  
 4. In that SSH session run **`grok-bridge start`** then **`grok-bridge-cli`** to chat with Grok Bot.
 
+**Expectations:** grok-bridge is an **SSH in/out-box**, not a fast chat UI. For the quickest replies, use the **Grok Bot app on the Mac mini**. From the CLI, expect tens of seconds after `sent, waiting…` while the agent runs and posts back.
+
 Details below.
 
 ## 1. Create Grok Advisor
@@ -85,7 +87,7 @@ grok-bridge-cli
 grok-bridge stop    # optional
 ```
 
-On exit, note the printed **Session log:** path if you need to debug.
+On exit, use **`/status`** if you need the session log path for debugging.
 
 **SSH disconnect:** `grok-bridge start` leaves the server running on the mini after you exit SSH. `grok-bridge-cli` is only for that session — leaving SSH ends the chat client, not the background server. Run `grok-bridge stop` later when you want the server down.
 

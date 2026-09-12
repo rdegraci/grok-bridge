@@ -4,6 +4,10 @@ CLI bridge for chatting with [Grok Bot](https://grok.x.ai/) agents on a dedicate
 
 **grok-bridge** lets you connect to your Mac mini remotely and work with your Grok Bot agents from a familiar terminal experience. Keep Grok Bot off your main laptop or workstation while still running it in a separate, always-available environment on your Mac mini.
 
+### Expectations
+
+This is an **SSH in/out-box**, not a fast chat UI. For the quickest replies, use the **Grok Bot app on the Mac mini**. Use **grok-bridge** when you are SSHed in and want a simple remote inbox — same agent, extra hop, so replies often take tens of seconds.
+
 ## Features
 
 - Background server: `grok-bridge start|stop|restart`
@@ -11,7 +15,7 @@ CLI bridge for chatting with [Grok Bot](https://grok.x.ai/) agents on a dedicate
 - Advisor webhook wake with JSON payload under `<webhook_event>.body`
 - Shared reply queue tagged by `bot` (Advisor-only in v0.1)
 - Config and secrets under macOS Application Support
-- Per-session CLI logs; path printed on exit
+- Per-session CLI logs; readline history under the appdir
 
 ## Requirements
 
@@ -86,9 +90,9 @@ grok-bridge-cli
 > /chat advisor
 [advisor] connected
 > What's the next step for the lorebuilder page?
+sent, waiting…
 [advisor] …
 > /quit
-Session log: /Users/…/Library/Application Support/grok-bridge/logs/cli-….log
 ```
 
 ```bash
@@ -117,7 +121,8 @@ SSH → Mac mini
 
 - Wire body to the webhook is plain JSON (no envelope).
 - Grok Bot presents an envelope to the agent; fields live under `body`.
-- The CLI short-polls for replies (default timeout 90s).
+- The CLI short-polls for replies (default timeout 90s). Expect tens of seconds
+  of wait after `sent, waiting…` — that is agent time, not a stuck poll loop.
 
 ## Security
 
