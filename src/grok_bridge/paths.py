@@ -83,6 +83,11 @@ def cli_logs_dir() -> Path:
     return path
 
 
+def cli_history_path() -> Path:
+    """Persistent readline history for grok-bridge-cli."""
+    return state_dir() / "cli-history"
+
+
 def _read_example(name: str) -> bytes:
     """Read packaged example under grok_bridge/examples/."""
     try:

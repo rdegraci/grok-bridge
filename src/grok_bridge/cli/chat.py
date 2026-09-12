@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import sys
@@ -11,10 +12,12 @@ from datetime import datetime
 from pathlib import Path
 
 from grok_bridge.cli.client import BridgeClient
-from grok_bridge.paths import cli_logs_dir
+from grok_bridge.paths import cli_history_path, cli_logs_dir
 from grok_bridge.server.config import load_settings
 
 log = logging.getLogger("grok_bridge.cli")
+
+_HISTORY_LENGTH = 1000
 
 
 def _truncate(text: str, limit: int = 200) -> str:
@@ -39,6 +42,38 @@ def _setup_session_log() -> Path:
     # Quiet HTTP client spam; keep grok_bridge.* readable in the session file
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    return path
+
+
+def _setup_readline() -> Path | None:
+    """Enable line editing + persistent history via stdlib readline."""
+    try:
+        import readline
+    except ImportError:
+        log.info("readline unavailable; using plain input()")
+        return None
+
+    path = cli_history_path()
+    try:
+        readline.read_history_file(str(path))
+        log.info("readline history loaded path=%s", path)
+    except OSError:
+        log.info("readline history missing path=%s (will create on exit)", path)
+
+    try:
+        readline.set_history_length(_HISTORY_LENGTH)
+    except Exception:  # noqa: BLE001 — libedit may not support this
+        pass
+
+    def _save_history() -> None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            readline.write_history_file(str(path))
+            log.info("readline history saved path=%s", path)
+        except OSError as exc:
+            log.warning("readline history save failed path=%s err=%s", path, exc)
+
+    atexit.register(_save_history)
     return path
 
 
@@ -76,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
 
         active_bot: str | None = None
         cursors: dict[str, int] = {}
+        history_path = _setup_readline()
 
         print("grok-bridge-cli — /chat <bot>, /status, /quit")
         while True:
@@ -123,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"base_url={settings.base_url}")
                 print(f"cursors={cursors}")
                 print(f"session_log={session_log}")
+                print(f"history={history_path or '(unavailable)'}")
                 continue
 
             if line.startswith("/"):
