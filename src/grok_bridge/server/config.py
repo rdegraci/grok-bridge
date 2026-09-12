@@ -14,6 +14,8 @@ from grok_bridge.paths import (
     config_path,
     dotenv_path,
     ensure_app_config,
+    ensure_bridge_token,
+    token_path,
 )
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -58,7 +60,10 @@ def _load_yaml(path: Path) -> dict:
 def load_settings(*, require_token: bool = True, require_advisor_webhook: bool = False) -> Settings:
     app, created_dotenv, created_config = ensure_app_config()
 
-    # Prefer Application Support; allow process env to override after load
+    # Bridge Bearer token: file-backed (~/.config/grok-bridge/token), not .env
+    token, _created_token = ensure_bridge_token()
+
+    # Application Support .env holds webhook secrets only
     load_dotenv(dotenv_path(), override=False)
     load_dotenv(override=False)
 
@@ -75,14 +80,9 @@ def load_settings(*, require_token: bool = True, require_advisor_webhook: bool =
     reply_timeout_sec = float(cli.get("reply_timeout_sec") or 90)
     max_replies = int(queue.get("max_replies") or 500)
 
-    token = (os.environ.get("GROK_BRIDGE_TOKEN") or "").strip()
-    if require_token and (not token or token == "CHANGE_ME"):
-        hint = ""
-        if created_dotenv or created_config:
-            hint = f" Fresh example files were created in {app}."
+    if require_token and not token:
         raise SystemExit(
-            f"GROK_BRIDGE_TOKEN is not set (or still CHANGE_ME). "
-            f"Edit {dotenv_path()} and set a real token.{hint}"
+            f"GROK_BRIDGE_TOKEN could not be loaded from {token_path()}."
         )
 
     bots: dict[str, BotConfig] = {}

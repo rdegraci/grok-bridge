@@ -1,5 +1,7 @@
 # Auto-copied to ~/Library/Application Support/grok-bridge/config.yaml on first run.
-# Tunable knobs (non-secret). Secrets stay in .env.
+# Tunable knobs (non-secret).
+# Webhook secrets: Application Support .env
+# Bridge Bearer token: ~/.config/grok-bridge/token (auto-generated)
 
 server:
   # Must remain loopback for MVP (127.0.0.1 or ::1)

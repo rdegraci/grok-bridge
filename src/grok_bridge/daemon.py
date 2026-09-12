@@ -59,6 +59,10 @@ def _clear_pid() -> None:
         path.unlink()
 
 
+def _listen_addr(settings) -> str:
+    return f"{settings.host}:{settings.port}"
+
+
 def cmd_run() -> int:
     """Foreground server (used by start after backgrounding)."""
     settings = load_settings(require_token=True, require_advisor_webhook=True)
@@ -88,15 +92,19 @@ def cmd_run() -> int:
 
 
 def cmd_start() -> int:
-    from grok_bridge.paths import ensure_app_config
+    from grok_bridge.paths import ensure_app_config, ensure_bridge_token, token_path
 
     app, created_dotenv, created_config = ensure_app_config()
     if created_dotenv or created_config:
         print(f"seeded appdir: {app}")
         if created_dotenv:
-            print(f"  created {app / '.env'} (edit secrets)")
+            print(f"  created {app / '.env'} (edit webhook secrets)")
         if created_config:
             print(f"  created {app / 'config.yaml'} (tunable knobs)")
+
+    _token, created_token = ensure_bridge_token()
+    if created_token:
+        print(f"created bridge token: {token_path()}")
 
     settings = load_settings(require_token=True, require_advisor_webhook=True)
     settings.require_loopback()
@@ -104,6 +112,7 @@ def cmd_start() -> int:
     existing = _read_pid()
     if existing is not None and _pid_alive(existing):
         print(f"already running pid={existing}")
+        print(f"listening on {_listen_addr(settings)}")
         return 0
     if existing is not None:
         _clear_pid()
@@ -165,6 +174,7 @@ def cmd_start() -> int:
         return 1
 
     print(f"started pid={pid}")
+    print(f"listening on {_listen_addr(settings)}")
     print(f"log={log_file}")
     return 0
 

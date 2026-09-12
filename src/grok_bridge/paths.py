@@ -1,7 +1,9 @@
-"""Filesystem locations for app config, PID, and logs."""
+"""Filesystem locations for app config, PID, logs, and bridge token."""
 
 from __future__ import annotations
 
+import os
+import secrets
 import sys
 from importlib import resources
 from pathlib import Path
@@ -15,6 +17,39 @@ def app_dir() -> Path:
         path = Path.home() / ".grok-bridge"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def config_home() -> Path:
+    """XDG-style config dir for the auto-generated bridge token."""
+    path = Path.home() / ".config" / "grok-bridge"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def token_path() -> Path:
+    return config_home() / "token"
+
+
+def ensure_bridge_token() -> tuple[str, bool]:
+    """
+    Ensure ~/.config/grok-bridge/token exists; load into GROK_BRIDGE_TOKEN.
+
+    Generates a random token on first use. Returns (token, created).
+    """
+    path = token_path()
+    created = False
+    if not path.is_file() or not path.read_text(encoding="utf-8").strip():
+        token = secrets.token_urlsafe(32)
+        path.write_text(token + "\n", encoding="utf-8")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+        created = True
+    else:
+        token = path.read_text(encoding="utf-8").strip()
+    os.environ["GROK_BRIDGE_TOKEN"] = token
+    return token, created
 
 
 def state_dir() -> Path:
@@ -44,26 +79,27 @@ def cli_logs_dir() -> Path:
 
 
 def _read_example(name: str) -> bytes:
-    """Read packaged example, then repo-root example."""
+    """Read packaged example under grok_bridge/examples/."""
     try:
         base = resources.files("grok_bridge") / "examples" / name
         return base.read_bytes()
     except (FileNotFoundError, ModuleNotFoundError, TypeError, AttributeError, OSError):
         pass
 
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        candidate = parent / name
-        if candidate.is_file():
-            return candidate.read_bytes()
-    raise FileNotFoundError(f"Could not find example file {name!r}")
+    # Editable / source-tree fallback
+    here = Path(__file__).resolve().parent
+    candidate = here / "examples" / name
+    if candidate.is_file():
+        return candidate.read_bytes()
+    raise FileNotFoundError(f"Could not find packaged example {name!r}")
 
 
 def ensure_app_config() -> tuple[Path, bool, bool]:
     """
     Ensure Application Support appdir has .env and config.yaml.
 
-    Copies from dot_env.example / config.yaml.example when missing.
+    Copies from packaged examples/dot_env.example and
+    examples/config.yaml.example when missing.
     Returns (app_dir, created_dotenv, created_config).
     """
     dest_dir = app_dir()
